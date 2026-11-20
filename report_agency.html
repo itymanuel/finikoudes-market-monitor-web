@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Price Recommendations — Finikoudes</title>
+<style>
+
+  :root {
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #6b7280; --border: #e5e7eb;
+    --mine-bg: #eff6ff; --mine-border: #93c5fd; --badge-bg: #2563eb;
+    --agency-badge-bg: #d97706;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --fg: #e8e8e8; --muted: #9aa1ab; --border: #2c2f36;
+      --mine-bg: #142238; --mine-border: #2f5aa8; --badge-bg: #3b82f6;
+      --agency-badge-bg: #f59e0b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--fg); margin: 0; padding: 24px 16px 64px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  h1.section-title { font-size: 1.15rem; margin: 40px 0 2px; padding-top: 24px; border-top: 1px solid var(--border); }
+  h1.section-title:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 28px; }
+  h2 { font-size: 1.1rem; margin: 32px 0 6px; }
+  h3.tier-title { font-size: 0.82rem; margin: 18px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  h3.tier-title:first-of-type { margin-top: 8px; }
+  p.note { color: var(--muted); font-size: 0.85rem; margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; margin-bottom: 8px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.02em; }
+  td.name { font-weight: 500; }
+  tr.mine { background: var(--mine-bg); }
+  tr.mine td:first-child { border-left: 3px solid var(--mine-border); }
+  tr.closure { opacity: 0.7; }
+  td.closure-cell { text-align: left; color: var(--muted); font-style: italic; }
+  .partial-closure { font-style: italic; }
+  .badge {
+    display: inline-block; background: var(--badge-bg); color: #fff; font-size: 0.68rem;
+    font-weight: 700; padding: 1px 6px; border-radius: 4px; vertical-align: middle; margin-left: 4px;
+  }
+  .badge.agency { background: var(--agency-badge-bg); }
+  td.name a { color: inherit; text-decoration: none; }
+  td.name a:hover { text-decoration: underline; cursor: pointer; }
+  .muted { color: var(--muted); font-size: 0.78rem; }
+  .muted.confirmed { color: #16a34a; }
+  @media (prefers-color-scheme: dark) { .muted.confirmed { color: #4ade80; } }
+  td.revenue { font-weight: 600; }
+  td.rec-price { font-weight: 700; color: var(--badge-bg); }
+  table.price-rec th.rec-notes, table.price-rec td.rec-notes {
+    text-align: left; font-size: 0.78rem; color: var(--muted); font-weight: 400;
+    text-transform: none; letter-spacing: normal;
+  }
+  td.tier { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+  td.name, th.col-name { text-align: left; }
+  .price-alert { font-size: 0.78rem; font-weight: 600; }
+  .price-alert.up { color: #dc2626; }
+  .price-alert.down { color: #16a34a; }
+  @media (prefers-color-scheme: dark) {
+    .price-alert.up { color: #f87171; }
+    .price-alert.down { color: #4ade80; }
+  }
+  /* Pestañas / filtros con radios CSS, sin JavaScript (mismo patron en
+     Observations del informe interno y en el filtro por propiedad del
+     log de reservas+cancelaciones). */
+  .tab-radio { display: none; }
+  .tab-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+  .tab-label {
+    cursor: pointer; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border);
+    font-size: 0.82rem; color: var(--muted); white-space: nowrap; user-select: none;
+  }
+  .event-type { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 1px 7px; border-radius: 4px; }
+  .event-type.booking { background: #dcfce7; color: #166534; }
+  .event-type.cancellation { background: #fee2e2; color: #991b1b; }
+  @media (prefers-color-scheme: dark) {
+    .event-type.booking { background: #14532d; color: #86efac; }
+    .event-type.cancellation { background: #450a0a; color: #fca5a5; }
+  }
+
+  .internal-col { display: none; }
+  #show-internal:checked ~ .rec-wrap .internal-col { display: table-cell; }
+  .internal-toggle { display: inline-block; margin: 0 0 12px; font-size: 0.85rem; color: var(--muted); cursor: pointer; }
+  @media print { .internal-toggle { display: none; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Finikoudes — Price Recommendations</h1>
+    <div class="subtitle">Last updated: 20/11/2026 12:51 CET</div>
+    <input type="checkbox" id="show-internal" class="tab-radio">
+    <label for="show-internal" class="internal-toggle">☐ Show internal detail (band &amp; reasoning — not for the agency)</label>
+    <div class="rec-wrap">
+        <h1 class="section-title">Price recommendations</h1>
+        
+          <table class="price-rec">
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>My rate (sample)</th>
+                <th>My occupancy</th>
+                <th class="internal-col">Band (floor–ceiling)</th>
+                <th>Recommended price</th>
+                <th class="rec-notes internal-col">Reasoning</th>
+              </tr>
+            </thead>
+            <tbody>
+          <tr>
+            <td class="name">November 2026</td>
+            <td class="num">120 €</td>
+            <td class="num">40%</td>
+            <td class="num internal-col">—</td>
+            <td class="num rec-price">—</td>
+            <td class="rec-notes internal-col">No reliable direct-competitor rate for this period (all samples filtered out as outliers, or no sample yet).</td>
+          </tr>
+          <tr>
+            <td class="name">December 2026</td>
+            <td class="num">148 €</td>
+            <td class="num">23%</td>
+            <td class="num internal-col">119 € – 186 €</td>
+            <td class="num rec-price">121 €</td>
+            <td class="rec-notes internal-col">floor set by Modern Apartment near the Beach (119 €) — no premium above it<br>seasonal position: recommended price set 0% of the way from floor to ceiling<br>+2 € over the floor so the price never ties exactly with the floor-setting competitor</td>
+          </tr>
+          <tr>
+            <td class="name">January 2027</td>
+            <td class="num">150 €</td>
+            <td class="num">26%</td>
+            <td class="num internal-col">175 € – 208 €</td>
+            <td class="num rec-price">177 €</td>
+            <td class="rec-notes internal-col">floor set by Modern Apartment near the Beach (175 €) — no premium above it<br>seasonal position: recommended price set 0% of the way from floor to ceiling<br>+2 € over the floor so the price never ties exactly with the floor-setting competitor</td>
+          </tr>
+          <tr>
+            <td class="name">February 2027</td>
+            <td class="num">150 €</td>
+            <td class="num">0%</td>
+            <td class="num internal-col">175 € – 196 €</td>
+            <td class="num rec-price">177 €</td>
+            <td class="rec-notes internal-col">floor set by Modern Apartment near the Beach (175 €) — no premium above it<br>seasonal position: recommended price set 0% of the way from floor to ceiling<br>+2 € over the floor so the price never ties exactly with the floor-setting competitor</td>
+          </tr>
+          <tr>
+            <td class="name">March 2027</td>
+            <td class="num">165 €</td>
+            <td class="num">0%</td>
+            <td class="num internal-col">175 € – 197 €</td>
+            <td class="num rec-price">177 €</td>
+            <td class="rec-notes internal-col">floor set by Modern Apartment near the Beach (175 €) — no premium above it<br>seasonal position: recommended price set 0% of the way from floor to ceiling<br>+2 € over the floor so the price never ties exactly with the floor-setting competitor</td>
+          </tr>
+          <tr>
+            <td class="name">April 2027</td>
+            <td class="num">182 €</td>
+            <td class="num">0%</td>
+            <td class="num internal-col">182 € – 196 €</td>
+            <td class="num rec-price">185 €</td>
+            <td class="rec-notes internal-col">floor set by Design Residence near Finikoudes (182 €) — no premium above it<br>seasonal position: recommended price set 25% of the way from floor to ceiling</td>
+          </tr>
+          <tr>
+            <td class="name">May 2027</td>
+            <td class="num">—</td>
+            <td class="num">0%</td>
+            <td class="num internal-col">190 € – 202 €</td>
+            <td class="num rec-price">196 €</td>
+            <td class="rec-notes internal-col">floor set by Design Residence near Finikoudes (190 €) — no premium above it<br>seasonal position: recommended price set 50% of the way from floor to ceiling<br>excluded as outlier: Modern Apartment near the Beach (209 €) — 209.40 EUR is above the computed ceiling (201.75 EUR)</td>
+          </tr>
+          <tr>
+            <td class="name">June 2027</td>
+            <td class="num">210 €</td>
+            <td class="num">0%</td>
+            <td class="num internal-col">210 € – 214 €</td>
+            <td class="num rec-price">213 €</td>
+            <td class="rec-notes internal-col">floor set by Design Residence near Finikoudes (210 €) — no premium above it<br>seasonal position: recommended price set 75% of the way from floor to ceiling</td>
+          </tr>
+          <tr>
+            <td class="name">July 2027</td>
+            <td class="num">232 €</td>
+            <td class="num">0%</td>
+            <td class="num internal-col">209 € – 214 €</td>
+            <td class="num rec-price">214 €</td>
+            <td class="rec-notes internal-col">floor set by Modern Apartment near the Beach (209 €) — no premium above it<br>seasonal position: recommended price set 100% of the way from floor to ceiling<br>excluded as outlier: Design Residence near Finikoudes (232 €) — 232.00 EUR is above the computed ceiling (213.50 EUR)</td>
+          </tr>
+          <tr>
+            <td class="name">August 2027</td>
+            <td class="num">256 €</td>
+            <td class="num">0%</td>
+            <td class="num internal-col">209 € – 214 €</td>
+            <td class="num rec-price">214 €</td>
+            <td class="rec-notes internal-col">floor set by Modern Apartment near the Beach (209 €) — no premium above it<br>seasonal position: recommended price set 100% of the way from floor to ceiling<br>excluded as outlier: Design Residence near Finikoudes (256 €) — 256.00 EUR is above the computed ceiling (213.50 EUR); 256.00 EUR is 41% above its own historical median (181.20 EUR, 1650 samples)</td>
+          </tr>
+          <tr>
+            <td class="name">September 2027</td>
+            <td class="num">232 €</td>
+            <td class="num">0%</td>
+            <td class="num internal-col">209 € – 214 €</td>
+            <td class="num rec-price">212 €</td>
+            <td class="rec-notes internal-col">floor set by Modern Apartment near the Beach (209 €) — no premium above it<br>seasonal position: recommended price set 75% of the way from floor to ceiling<br>excluded as outlier: Design Residence near Finikoudes (232 €) — 232.00 EUR is above the computed ceiling (213.50 EUR)</td>
+          </tr>
+          <tr>
+            <td class="name">October 2027</td>
+            <td class="num">—</td>
+            <td class="num">—</td>
+            <td class="num internal-col">≤ 206 €</td>
+            <td class="num rec-price">—</td>
+            <td class="rec-notes internal-col">excluded as outlier: Modern Apartment near the Beach (209 €) — 209.40 EUR is above the computed ceiling (206.25 EUR)<br>No reliable direct-competitor rate for this period (all samples filtered out as outliers, or no sample yet).</td>
+          </tr></tbody>
+          </table>
+        
+        <h3 class="tier-title">Special periods</h3>
+        
+          <table class="price-rec">
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>My rate (sample)</th>
+                <th>My occupancy</th>
+                <th class="internal-col">Band (floor–ceiling)</th>
+                <th>Recommended price</th>
+                <th class="rec-notes internal-col">Reasoning</th>
+              </tr>
+            </thead>
+            <tbody>
+          <tr>
+            <td class="name">🎉 Christmas & New Year (12/20–01/06)</td>
+            <td class="num">163 €</td>
+            <td class="num">41%</td>
+            <td class="num internal-col">166 € – 204 €</td>
+            <td class="num rec-price">168 €</td>
+            <td class="rec-notes internal-col">floor set by Modern Apartment near the Beach (166 €) — no premium above it<br>seasonal position: recommended price set 0% of the way from floor to ceiling<br>+2 € over the floor so the price never ties exactly with the floor-setting competitor</td>
+          </tr>
+          <tr>
+            <td class="name">🎉 Orthodox Easter 2027 (04/28–05/04)</td>
+            <td class="num">—</td>
+            <td class="num">0%</td>
+            <td class="num internal-col">—</td>
+            <td class="num rec-price">189 €</td>
+            <td class="rec-notes internal-col">floor set by Modern Apartment near the Beach (189 €) — no premium above it<br>seasonal position: recommended price set 25% of the way from floor to ceiling</td>
+          </tr>
+          <tr>
+            <td class="name">🎉 Kataklysmos (Festival of the Flood, Larnaca) (06/17–06/23)</td>
+            <td class="num">210 €</td>
+            <td class="num">0%</td>
+            <td class="num internal-col">210 € – 216 €</td>
+            <td class="num rec-price">214 €</td>
+            <td class="rec-notes internal-col">floor set by Design Residence near Finikoudes (210 €) — no premium above it<br>seasonal position: recommended price set 75% of the way from floor to ceiling</td>
+          </tr></tbody>
+          </table></div>
+  </div>
+</body>
+</html>

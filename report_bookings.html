@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Booking Activity — Finikoudes (internal)</title>
+<style>
+
+  :root {
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #6b7280; --border: #e5e7eb;
+    --mine-bg: #eff6ff; --mine-border: #93c5fd; --badge-bg: #2563eb;
+    --agency-badge-bg: #d97706;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --fg: #e8e8e8; --muted: #9aa1ab; --border: #2c2f36;
+      --mine-bg: #142238; --mine-border: #2f5aa8; --badge-bg: #3b82f6;
+      --agency-badge-bg: #f59e0b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--fg); margin: 0; padding: 24px 16px 64px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin-bottom: 4px; }
+  h1.section-title { font-size: 1.15rem; margin: 40px 0 2px; padding-top: 24px; border-top: 1px solid var(--border); }
+  h1.section-title:first-of-type { margin-top: 0; padding-top: 0; border-top: none; }
+  .subtitle { color: var(--muted); font-size: 0.9rem; margin-bottom: 28px; }
+  h2 { font-size: 1.1rem; margin: 32px 0 6px; }
+  h3.tier-title { font-size: 0.82rem; margin: 18px 0 4px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  h3.tier-title:first-of-type { margin-top: 8px; }
+  p.note { color: var(--muted); font-size: 0.85rem; margin: 0 0 10px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.92rem; margin-bottom: 8px; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.02em; }
+  td.name { font-weight: 500; }
+  tr.mine { background: var(--mine-bg); }
+  tr.mine td:first-child { border-left: 3px solid var(--mine-border); }
+  tr.closure { opacity: 0.7; }
+  td.closure-cell { text-align: left; color: var(--muted); font-style: italic; }
+  .partial-closure { font-style: italic; }
+  .badge {
+    display: inline-block; background: var(--badge-bg); color: #fff; font-size: 0.68rem;
+    font-weight: 700; padding: 1px 6px; border-radius: 4px; vertical-align: middle; margin-left: 4px;
+  }
+  .badge.agency { background: var(--agency-badge-bg); }
+  td.name a { color: inherit; text-decoration: none; }
+  td.name a:hover { text-decoration: underline; cursor: pointer; }
+  .muted { color: var(--muted); font-size: 0.78rem; }
+  .muted.confirmed { color: #16a34a; }
+  @media (prefers-color-scheme: dark) { .muted.confirmed { color: #4ade80; } }
+  td.revenue { font-weight: 600; }
+  td.rec-price { font-weight: 700; color: var(--badge-bg); }
+  table.price-rec th.rec-notes, table.price-rec td.rec-notes {
+    text-align: left; font-size: 0.78rem; color: var(--muted); font-weight: 400;
+    text-transform: none; letter-spacing: normal;
+  }
+  td.tier { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+  td.name, th.col-name { text-align: left; }
+  .price-alert { font-size: 0.78rem; font-weight: 600; }
+  .price-alert.up { color: #dc2626; }
+  .price-alert.down { color: #16a34a; }
+  @media (prefers-color-scheme: dark) {
+    .price-alert.up { color: #f87171; }
+    .price-alert.down { color: #4ade80; }
+  }
+  /* Pestañas / filtros con radios CSS, sin JavaScript (mismo patron en
+     Observations del informe interno y en el filtro por propiedad del
+     log de reservas+cancelaciones). */
+  .tab-radio { display: none; }
+  .tab-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 14px; }
+  .tab-label {
+    cursor: pointer; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border);
+    font-size: 0.82rem; color: var(--muted); white-space: nowrap; user-select: none;
+  }
+  .event-type { display: inline-block; font-size: 0.72rem; font-weight: 700; padding: 1px 7px; border-radius: 4px; }
+  .event-type.booking { background: #dcfce7; color: #166534; }
+  .event-type.cancellation { background: #fee2e2; color: #991b1b; }
+  @media (prefers-color-scheme: dark) {
+    .event-type.booking { background: #14532d; color: #86efac; }
+    .event-type.cancellation { background: #450a0a; color: #fca5a5; }
+  }
+
+  #logfilter-854205693759357337:checked ~ table tbody tr:not(.row-854205693759357337) { display: none; }
+  #logfilter-854205693759357337:checked ~ .tab-row label[for="logfilter-854205693759357337"] { background: var(--badge-bg); color: #fff; border-color: var(--badge-bg); }
+  #logfilter-854198971249800997:checked ~ table tbody tr:not(.row-854198971249800997) { display: none; }
+  #logfilter-854198971249800997:checked ~ .tab-row label[for="logfilter-854198971249800997"] { background: var(--badge-bg); color: #fff; border-color: var(--badge-bg); }
+  #logfilter-978335935670685377:checked ~ table tbody tr:not(.row-978335935670685377) { display: none; }
+  #logfilter-978335935670685377:checked ~ .tab-row label[for="logfilter-978335935670685377"] { background: var(--badge-bg); color: #fff; border-color: var(--badge-bg); }
+  #logfilter-1373922501353519426:checked ~ table tbody tr:not(.row-1373922501353519426) { display: none; }
+  #logfilter-1373922501353519426:checked ~ .tab-row label[for="logfilter-1373922501353519426"] { background: var(--badge-bg); color: #fff; border-color: var(--badge-bg); }
+  #logfilter-1181274892742189258:checked ~ table tbody tr:not(.row-1181274892742189258) { display: none; }
+  #logfilter-1181274892742189258:checked ~ .tab-row label[for="logfilter-1181274892742189258"] { background: var(--badge-bg); color: #fff; border-color: var(--badge-bg); }
+  #logfilter-1465144111755135950:checked ~ table tbody tr:not(.row-1465144111755135950) { display: none; }
+  #logfilter-1465144111755135950:checked ~ .tab-row label[for="logfilter-1465144111755135950"] { background: var(--badge-bg); color: #fff; border-color: var(--badge-bg); }
+  #logfilter-34993051:checked ~ table tbody tr:not(.row-34993051) { display: none; }
+  #logfilter-34993051:checked ~ .tab-row label[for="logfilter-34993051"] { background: var(--badge-bg); color: #fff; border-color: var(--badge-bg); }
+  #logfilter-1650616865473102759:checked ~ table tbody tr:not(.row-1650616865473102759) { display: none; }
+  #logfilter-1650616865473102759:checked ~ .tab-row label[for="logfilter-1650616865473102759"] { background: var(--badge-bg); color: #fff; border-color: var(--badge-bg); }
+  #logfilter-40697110:checked ~ table tbody tr:not(.row-40697110) { display: none; }
+  #logfilter-40697110:checked ~ .tab-row label[for="logfilter-40697110"] { background: var(--badge-bg); color: #fff; border-color: var(--badge-bg); }
+  #logfilter-all:checked ~ .tab-row label[for="logfilter-all"] { background: var(--badge-bg); color: #fff; border-color: var(--badge-bg); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Finikoudes — Booking Activity (internal only)</h1>
+    <div class="subtitle">Last updated: 20/11/2026 13:08 CET</div>
+    
+        <h1 class="section-title">Booking &amp; cancellation log</h1>
+        <p class="note">Every booking and cancellation detected so far, across all tracked listings, most recent first.</p>
+        <div class="log-filter">
+          <input type="radio" name="logfilter" id="logfilter-all" class="tab-radio" checked><input type="radio" name="logfilter" id="logfilter-854205693759357337" class="tab-radio"><input type="radio" name="logfilter" id="logfilter-854198971249800997" class="tab-radio"><input type="radio" name="logfilter" id="logfilter-978335935670685377" class="tab-radio"><input type="radio" name="logfilter" id="logfilter-1373922501353519426" class="tab-radio"><input type="radio" name="logfilter" id="logfilter-1181274892742189258" class="tab-radio"><input type="radio" name="logfilter" id="logfilter-1465144111755135950" class="tab-radio"><input type="radio" name="logfilter" id="logfilter-34993051" class="tab-radio"><input type="radio" name="logfilter" id="logfilter-1650616865473102759" class="tab-radio"><input type="radio" name="logfilter" id="logfilter-40697110" class="tab-radio">
+          <div class="tab-row"><label for="logfilter-all" class="tab-label">All properties</label><label for="logfilter-854205693759357337" class="tab-label">Aphrodite Plaza – Junior Suite</label><label for="logfilter-854198971249800997" class="tab-label">Aphrodite Plaza – Luxury Suite</label><label for="logfilter-978335935670685377" class="tab-label">Finikoudes 3BR</label><label for="logfilter-1373922501353519426" class="tab-label">Design Residence near Finikoudes</label><label for="logfilter-1181274892742189258" class="tab-label">Modern Apartment near the Beach</label><label for="logfilter-1465144111755135950" class="tab-label">Penthouse in central Larnaca</label><label for="logfilter-34993051" class="tab-label">Agios Lazaros Beach House</label><label for="logfilter-1650616865473102759" class="tab-label">Gaia Residence in Larnaca (4BR villa, pool)</label><label for="logfilter-40697110" class="tab-label">Beachfront 3BR with Sea & Marina Views</label></div>
+          <table>
+            <thead>
+              <tr>
+                <th>Detected</th>
+                <th>Type</th>
+                <th class="col-name">Property</th>
+                <th>Dates</th>
+                <th>Nights</th>
+                <th>Rate/night (bookings, if sampled)</th>
+              </tr>
+            </thead>
+            <tbody>
+          <tr class="row-854205693759357337">
+            <td class="name">20/11/2026 12:51 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">02/13 – 02/17</td>
+            <td class="num">4</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">20/11/2026 12:51 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">11/23 – 11/26</td>
+            <td class="num">3</td>
+            <td class="num">160 €</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">20/11/2026 05:31 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">12/07 – 12/14</td>
+            <td class="num">7</td>
+            <td class="num">200 €</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">20/11/2026 05:31 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">12/18 – 12/20</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">20/11/2026 05:31 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">05/16 – 05/21</td>
+            <td class="num">5</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">19/11/2026 17:30 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">09/18 – 09/28</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">19/11/2026 17:30 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">10/14 – 10/21</td>
+            <td class="num">7</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1373922501353519426">
+            <td class="name">18/11/2026 05:51 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1373922501353519426" target="_blank" rel="noopener">Design Residence near Finikoudes</a> <span class="badge agency">AGENCY</span></td>
+            <td class="num">12/28 – 01/04</td>
+            <td class="num">7</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">18/11/2026 05:51 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">12/28 – 01/04</td>
+            <td class="num">7</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">17/11/2026 17:50 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">09/18 – 10/02</td>
+            <td class="num">14</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">17/11/2026 06:23 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">04/16 – 04/21</td>
+            <td class="num">5</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">16/11/2026 17:57 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">11/17 – 11/19</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">16/11/2026 17:57 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">02/13 – 02/16</td>
+            <td class="num">3</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">16/11/2026 01:28 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">12/17 – 12/21</td>
+            <td class="num">4</td>
+            <td class="num">252 €</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">16/11/2026 01:28 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">03/20 – 03/26</td>
+            <td class="num">6</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">15/11/2026 01:28 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">11/26 – 11/28</td>
+            <td class="num">2</td>
+            <td class="num">190 €</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">14/11/2026 18:03 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">06/09 – 06/15</td>
+            <td class="num">6</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-978335935670685377 mine">
+            <td class="name">14/11/2026 18:03 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/978335935670685377" target="_blank" rel="noopener">Finikoudes 3BR</a> <span class="badge">MINE</span></td>
+            <td class="num">12/01 – 12/06</td>
+            <td class="num">5</td>
+            <td class="num">148 €</td>
+          </tr>
+          <tr class="row-1650616865473102759">
+            <td class="name">14/11/2026 18:03 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1650616865473102759" target="_blank" rel="noopener">Gaia Residence in Larnaca (4BR villa, pool)</a></td>
+            <td class="num">11/15 – 11/16</td>
+            <td class="num">1</td>
+            <td class="num">287 €</td>
+          </tr>
+          <tr class="row-1650616865473102759">
+            <td class="name">14/11/2026 18:03 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1650616865473102759" target="_blank" rel="noopener">Gaia Residence in Larnaca (4BR villa, pool)</a></td>
+            <td class="num">11/23 – 11/29</td>
+            <td class="num">6</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">13/11/2026 16:19 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">11/30 – 12/05</td>
+            <td class="num">5</td>
+            <td class="num">119 €</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">11/11/2026 04:20 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">03/04 – 03/07</td>
+            <td class="num">3</td>
+            <td class="num">175 €</td>
+          </tr>
+          <tr class="row-40697110">
+            <td class="name">11/11/2026 04:20 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/40697110" target="_blank" rel="noopener">Beachfront 3BR with Sea & Marina Views</a></td>
+            <td class="num">12/15 – 01/01</td>
+            <td class="num">17</td>
+            <td class="num">258 €</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">10/11/2026 14:50 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">08/01 – 08/10</td>
+            <td class="num">9</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">10/11/2026 14:50 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">11/10 – 11/12</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-978335935670685377 mine">
+            <td class="name">10/11/2026 14:50 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/978335935670685377" target="_blank" rel="noopener">Finikoudes 3BR</a> <span class="badge">MINE</span></td>
+            <td class="num">11/25 – 11/29</td>
+            <td class="num">4</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-34993051">
+            <td class="name">10/11/2026 14:50 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/34993051" target="_blank" rel="noopener">Agios Lazaros Beach House</a></td>
+            <td class="num">12/31 – 01/07</td>
+            <td class="num">7</td>
+            <td class="num">98 €</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">09/11/2026 04:12 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">11/23 – 11/25</td>
+            <td class="num">2</td>
+            <td class="num">190 €</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">09/11/2026 04:12 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">11/10 – 11/12</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">08/11/2026 15:15 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">02/12 – 02/14</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">08/11/2026 15:15 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">12/05 – 12/08</td>
+            <td class="num">3</td>
+            <td class="num">119 €</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">08/11/2026 03:52 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">02/19 – 02/21</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">07/11/2026 14:56 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">04/04 – 04/11</td>
+            <td class="num">7</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-978335935670685377 mine">
+            <td class="name">06/11/2026 21:22 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/978335935670685377" target="_blank" rel="noopener">Finikoudes 3BR</a> <span class="badge">MINE</span></td>
+            <td class="num">11/21 – 11/25</td>
+            <td class="num">4</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">06/11/2026 15:58 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">12/05 – 12/07</td>
+            <td class="num">2</td>
+            <td class="num">200 €</td>
+          </tr>
+          <tr class="row-978335935670685377 mine">
+            <td class="name">06/11/2026 15:58 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/978335935670685377" target="_blank" rel="noopener">Finikoudes 3BR</a> <span class="badge">MINE</span></td>
+            <td class="num">11/10 – 11/11</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">06/11/2026 02:13 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">11/07 – 11/12</td>
+            <td class="num">5</td>
+            <td class="num">119 €</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">05/11/2026 16:25 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">11/11 – 11/14</td>
+            <td class="num">3</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-978335935670685377 mine">
+            <td class="name">05/11/2026 02:10 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/978335935670685377" target="_blank" rel="noopener">Finikoudes 3BR</a> <span class="badge">MINE</span></td>
+            <td class="num">11/11 – 11/16</td>
+            <td class="num">5</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-34993051">
+            <td class="name">05/11/2026 02:10 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/34993051" target="_blank" rel="noopener">Agios Lazaros Beach House</a></td>
+            <td class="num">12/12 – 12/20</td>
+            <td class="num">8</td>
+            <td class="num">113 €</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">04/11/2026 01:57 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">01/22 – 01/26</td>
+            <td class="num">4</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">04/11/2026 01:57 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">11/19 – 11/23</td>
+            <td class="num">4</td>
+            <td class="num">139 €</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">03/11/2026 03:42 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">08/01 – 08/12</td>
+            <td class="num">11</td>
+            <td class="num">175 €</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">03/11/2026 03:42 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">04/06 – 04/10</td>
+            <td class="num">4</td>
+            <td class="num">148 €</td>
+          </tr>
+          <tr class="row-1373922501353519426">
+            <td class="name">02/11/2026 18:00 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1373922501353519426" target="_blank" rel="noopener">Design Residence near Finikoudes</a> <span class="badge agency">AGENCY</span></td>
+            <td class="num">11/04 – 11/06</td>
+            <td class="num">2</td>
+            <td class="num">150 €</td>
+          </tr>
+          <tr class="row-40697110">
+            <td class="name">02/11/2026 03:55 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/40697110" target="_blank" rel="noopener">Beachfront 3BR with Sea & Marina Views</a></td>
+            <td class="num">08/20 – 08/30</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">01/11/2026 03:46 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">06/09 – 06/15</td>
+            <td class="num">6</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">31/10/2026 03:53 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">11/02 – 11/06</td>
+            <td class="num">4</td>
+            <td class="num">212 €</td>
+          </tr>
+          <tr class="row-1373922501353519426">
+            <td class="name">31/10/2026 03:53 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1373922501353519426" target="_blank" rel="noopener">Design Residence near Finikoudes</a> <span class="badge agency">AGENCY</span></td>
+            <td class="num">12/28 – 01/04</td>
+            <td class="num">7</td>
+            <td class="num">155 €</td>
+          </tr>
+          <tr class="row-34993051">
+            <td class="name">31/10/2026 03:53 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/34993051" target="_blank" rel="noopener">Agios Lazaros Beach House</a></td>
+            <td class="num">11/27 – 11/28</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1373922501353519426">
+            <td class="name">30/10/2026 04:07 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1373922501353519426" target="_blank" rel="noopener">Design Residence near Finikoudes</a> <span class="badge agency">AGENCY</span></td>
+            <td class="num">11/27 – 12/01</td>
+            <td class="num">4</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">28/10/2026 14:59 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">10/31 – 11/01</td>
+            <td class="num">1</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">27/10/2026 14:09 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">12/29 – 01/03</td>
+            <td class="num">5</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">27/10/2026 14:09 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">05/23 – 05/25</td>
+            <td class="num">2</td>
+            <td class="num">163 €</td>
+          </tr>
+          <tr class="row-1650616865473102759">
+            <td class="name">26/10/2026 15:11 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1650616865473102759" target="_blank" rel="noopener">Gaia Residence in Larnaca (4BR villa, pool)</a></td>
+            <td class="num">11/13 – 11/16</td>
+            <td class="num">3</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">26/10/2026 02:56 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">10/27 – 10/31</td>
+            <td class="num">4</td>
+            <td class="num">119 €</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">26/10/2026 02:56 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">12/24 – 12/28</td>
+            <td class="num">4</td>
+            <td class="num">119 €</td>
+          </tr>
+          <tr class="row-34993051">
+            <td class="name">26/10/2026 02:56 CET</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/34993051" target="_blank" rel="noopener">Agios Lazaros Beach House</a></td>
+            <td class="num">07/04 – 07/12</td>
+            <td class="num">8</td>
+            <td class="num">145 €</td>
+          </tr>
+          <tr class="row-40697110">
+            <td class="name">26/10/2026 02:56 CET</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/40697110" target="_blank" rel="noopener">Beachfront 3BR with Sea & Marina Views</a></td>
+            <td class="num">12/24 – 01/03</td>
+            <td class="num">10</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">24/10/2026 04:08 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">12/10 – 12/12</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-34993051">
+            <td class="name">24/10/2026 04:08 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/34993051" target="_blank" rel="noopener">Agios Lazaros Beach House</a></td>
+            <td class="num">03/31 – 04/07</td>
+            <td class="num">7</td>
+            <td class="num">124 €</td>
+          </tr>
+          <tr class="row-1650616865473102759">
+            <td class="name">24/10/2026 04:08 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1650616865473102759" target="_blank" rel="noopener">Gaia Residence in Larnaca (4BR villa, pool)</a></td>
+            <td class="num">11/13 – 11/16</td>
+            <td class="num">3</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">22/10/2026 14:56 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">09/08 – 09/19</td>
+            <td class="num">11</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">21/10/2026 04:10 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">11/19 – 11/22</td>
+            <td class="num">3</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">20/10/2026 14:41 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">10/22 – 10/24</td>
+            <td class="num">2</td>
+            <td class="num">121 €</td>
+          </tr>
+          <tr class="row-40697110">
+            <td class="name">20/10/2026 04:17 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/40697110" target="_blank" rel="noopener">Beachfront 3BR with Sea & Marina Views</a></td>
+            <td class="num">09/10 – 09/19</td>
+            <td class="num">9</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">19/10/2026 16:37 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">10/20 – 10/22</td>
+            <td class="num">2</td>
+            <td class="num">119 €</td>
+          </tr>
+          <tr class="row-40697110">
+            <td class="name">19/10/2026 16:37 CEST</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/40697110" target="_blank" rel="noopener">Beachfront 3BR with Sea & Marina Views</a></td>
+            <td class="num">05/26 – 06/07</td>
+            <td class="num">12</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">19/10/2026 03:59 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">11/04 – 11/07</td>
+            <td class="num">3</td>
+            <td class="num">119 €</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">18/10/2026 14:02 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">06/24 – 07/02</td>
+            <td class="num">8</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">18/10/2026 03:42 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">11/25 – 11/30</td>
+            <td class="num">5</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">18/10/2026 03:42 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">04/11 – 04/15</td>
+            <td class="num">4</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">16/10/2026 14:21 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">11/06 – 11/09</td>
+            <td class="num">3</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-978335935670685377 mine">
+            <td class="name">15/10/2026 14:38 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/978335935670685377" target="_blank" rel="noopener">Finikoudes 3BR</a> <span class="badge">MINE</span></td>
+            <td class="num">10/22 – 10/27</td>
+            <td class="num">5</td>
+            <td class="num">154 €</td>
+          </tr>
+          <tr class="row-34993051">
+            <td class="name">15/10/2026 04:00 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/34993051" target="_blank" rel="noopener">Agios Lazaros Beach House</a></td>
+            <td class="num">02/22 – 02/27</td>
+            <td class="num">5</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-978335935670685377 mine">
+            <td class="name">13/10/2026 04:17 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/978335935670685377" target="_blank" rel="noopener">Finikoudes 3BR</a> <span class="badge">MINE</span></td>
+            <td class="num">11/21 – 11/25</td>
+            <td class="num">4</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">13/10/2026 04:17 CEST</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">11/05 – 11/13</td>
+            <td class="num">8</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">13/10/2026 04:17 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">12/04 – 12/07</td>
+            <td class="num">3</td>
+            <td class="num">162 €</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">13/10/2026 04:17 CEST</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">11/28 – 12/03</td>
+            <td class="num">5</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">12/10/2026 04:49 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">11/28 – 12/04</td>
+            <td class="num">6</td>
+            <td class="num">200 €</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">12/10/2026 04:49 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">02/01 – 02/09</td>
+            <td class="num">8</td>
+            <td class="num">162 €</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">10/10/2026 04:57 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">10/11 – 10/14</td>
+            <td class="num">3</td>
+            <td class="num">119 €</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">10/10/2026 04:57 CEST</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">12/03 – 12/06</td>
+            <td class="num">3</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">09/10/2026 16:20 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">06/19 – 06/27</td>
+            <td class="num">8</td>
+            <td class="num">203 €</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">09/10/2026 16:20 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">06/28 – 07/02</td>
+            <td class="num">4</td>
+            <td class="num">203 €</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">09/10/2026 02:44 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">05/13 – 05/23</td>
+            <td class="num">10</td>
+            <td class="num">191 €</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">09/10/2026 02:44 CEST</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">04/21 – 04/28</td>
+            <td class="num">7</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">08/10/2026 16:33 CEST</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">12/18 – 12/20</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-978335935670685377 mine">
+            <td class="name">08/10/2026 02:30 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/978335935670685377" target="_blank" rel="noopener">Finikoudes 3BR</a> <span class="badge">MINE</span></td>
+            <td class="num">10/27 – 11/03</td>
+            <td class="num">7</td>
+            <td class="num">154 €</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">08/10/2026 02:30 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">04/21 – 04/28</td>
+            <td class="num">7</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">08/10/2026 02:30 CEST</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">03/19 – 03/26</td>
+            <td class="num">7</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">05/10/2026 17:56 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">11/03 – 11/10</td>
+            <td class="num">7</td>
+            <td class="num">240 €</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">04/10/2026 15:10 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">05/07 – 05/13</td>
+            <td class="num">6</td>
+            <td class="num">191 €</td>
+          </tr>
+          <tr class="row-34993051">
+            <td class="name">04/10/2026 15:10 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/34993051" target="_blank" rel="noopener">Agios Lazaros Beach House</a></td>
+            <td class="num">06/05 – 06/06</td>
+            <td class="num">1</td>
+            <td class="num">149 €</td>
+          </tr>
+          <tr class="row-34993051">
+            <td class="name">03/10/2026 04:29 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/34993051" target="_blank" rel="noopener">Agios Lazaros Beach House</a></td>
+            <td class="num">05/27 – 06/05</td>
+            <td class="num">9</td>
+            <td class="num">149 €</td>
+          </tr>
+          <tr class="row-978335935670685377 mine">
+            <td class="name">02/10/2026 15:49 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/978335935670685377" target="_blank" rel="noopener">Finikoudes 3BR</a> <span class="badge">MINE</span></td>
+            <td class="num">10/21 – 10/22</td>
+            <td class="num">1</td>
+            <td class="num">179 €</td>
+          </tr>
+          <tr class="row-1181274892742189258">
+            <td class="name">02/10/2026 15:49 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1181274892742189258" target="_blank" rel="noopener">Modern Apartment near the Beach</a></td>
+            <td class="num">05/13 – 05/21</td>
+            <td class="num">8</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-1465144111755135950">
+            <td class="name">02/10/2026 04:43 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1465144111755135950" target="_blank" rel="noopener">Penthouse in central Larnaca</a></td>
+            <td class="num">03/28 – 04/04</td>
+            <td class="num">7</td>
+            <td class="num">174 €</td>
+          </tr>
+          <tr class="row-1373922501353519426">
+            <td class="name">01/10/2026 16:25 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/1373922501353519426" target="_blank" rel="noopener">Design Residence near Finikoudes</a> <span class="badge agency">AGENCY</span></td>
+            <td class="num">10/30 – 11/04</td>
+            <td class="num">5</td>
+            <td class="num">150 €</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">01/10/2026 12:48 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">10/02 – 10/04</td>
+            <td class="num">2</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">01/10/2026 12:48 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">03/03 – 03/07</td>
+            <td class="num">4</td>
+            <td class="num">250 €</td>
+          </tr>
+          <tr class="row-854198971249800997">
+            <td class="name">01/10/2026 12:48 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854198971249800997" target="_blank" rel="noopener">Aphrodite Plaza – Luxury Suite</a></td>
+            <td class="num">02/14 – 02/18</td>
+            <td class="num">4</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-34993051">
+            <td class="name">29/09/2026 14:39 CEST</td>
+            <td class="name"><span class="event-type booking">Booking</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/34993051" target="_blank" rel="noopener">Agios Lazaros Beach House</a></td>
+            <td class="num">06/24 – 07/02</td>
+            <td class="num">8</td>
+            <td class="num">—</td>
+          </tr>
+          <tr class="row-854205693759357337">
+            <td class="name">29/09/2026 13:32 CEST</td>
+            <td class="name"><span class="event-type cancellation">Cancellation</span></td>
+            <td class="name"><a href="https://www.airbnb.es/rooms/854205693759357337" target="_blank" rel="noopener">Aphrodite Plaza – Junior Suite</a></td>
+            <td class="num">10/02 – 10/05</td>
+            <td class="num">3</td>
+            <td class="num">—</td>
+          </tr></tbody>
+          </table>
+        </div>
+  </div>
+</body>
+</html>
