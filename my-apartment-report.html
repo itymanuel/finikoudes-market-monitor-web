@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finikoudes — Airbnb Bookings</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #6b7280; --border: #e5e7eb;
+    --accent: #d92d6a; --accent-bg: #fde8f0;
+    --ok-bg: #eafaf0; --ok-fg: #067647;
+    --cancel-bg: #fdecec; --cancel-fg: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171b; --fg: #e8e8ea; --muted: #9aa0a6; --border: #2c2d33;
+      --accent: #ff5f9e; --accent-bg: #3a1c2a;
+      --ok-bg: #123524; --ok-fg: #6fe3a4;
+      --cancel-bg: #3a1616; --cancel-fg: #ff8d80;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--fg);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 0.9rem; margin-bottom: 20px; }
+  .outdated-badge {
+    display: none; margin-left: 8px; padding: 2px 8px; border-radius: 999px;
+    background: var(--cancel-bg); color: var(--cancel-fg); font-weight: 700;
+    font-size: 0.78rem; letter-spacing: 0.04em; vertical-align: middle;
+  }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px; }
+  .tabs input { display: none; }
+  .tabs label {
+    padding: 8px 16px; cursor: pointer; border-radius: 8px 8px 0 0;
+    color: var(--muted); font-weight: 600; font-size: 0.9rem;
+  }
+  #tab-cal:checked ~ .tabs label[for="tab-cal"],
+  #tab-log:checked ~ .tabs label[for="tab-log"],
+  #tab-prices:checked ~ .tabs label[for="tab-prices"] {
+    color: var(--accent); background: var(--accent-bg);
+  }
+  .panel { display: none; }
+  #tab-cal:checked ~ .panels #panel-cal,
+  #tab-log:checked ~ .panels #panel-log,
+  #tab-prices:checked ~ .panels #panel-prices { display: block; }
+
+  .summary { margin-bottom: 24px; }
+  .note { color: var(--muted); font-size: 0.85rem; margin: 0 0 10px; }
+  table.list { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  table.list th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  table.list td { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .muted { color: var(--muted); font-size: 0.85em; }
+
+  .price-trend { font-weight: 600; white-space: nowrap; }
+  .price-trend.up { color: var(--cancel-fg); }
+  .price-trend.down { color: var(--ok-fg); }
+  .price-trend.flat { color: var(--muted); font-weight: 400; }
+
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: 0.8em; font-weight: 600; white-space: nowrap; }
+  .ev-new { background: var(--ok-bg); color: var(--ok-fg); }
+  .ev-change { background: var(--accent-bg); color: var(--accent); }
+  .ev-cancelled { background: var(--cancel-bg); color: var(--cancel-fg); }
+
+  .months { display: flex; flex-wrap: wrap; gap: 24px; }
+  .month h3 { font-size: 0.95rem; margin: 0 0 8px; }
+  table.calendar { border-collapse: collapse; }
+  table.calendar th { font-size: 0.75rem; color: var(--muted); font-weight: 600; padding: 3px 6px; }
+  table.calendar td { width: 30px; height: 26px; text-align: center; font-size: 0.8rem; border-radius: 4px; }
+  table.calendar td.booked { background: var(--cancel-bg); color: var(--cancel-fg); font-weight: 600; }
+  table.calendar td.past { opacity: 0.4; }
+  table.calendar td.today { outline: 2px solid var(--accent); outline-offset: -2px; }
+  table.calendar td.empty { opacity: 0; }
+
+  footer { margin-top: 32px; color: var(--muted); font-size: 0.8rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Finikoudes — Airbnb Bookings</h1>
+  <div class="sub">Automatically updated on
+    <span id="updated-at" data-generated-at="2026-11-20T12:17:55Z">2026-11-20 13:17 CET</span>
+    · <a href="https://www.airbnb.es/rooms/978335935670685377">view listing</a>
+    <span id="outdated-badge" class="outdated-badge">&#9888; OUTDATED</span>
+  </div>
+
+  <input type="radio" name="tabs" id="tab-cal" checked>
+  <input type="radio" name="tabs" id="tab-log">
+  <input type="radio" name="tabs" id="tab-prices">
+  <div class="tabs">
+    <label for="tab-cal">Calendar</label>
+    <label for="tab-log">Activity</label>
+    <label for="tab-prices">Prices</label>
+  </div>
+
+  <div class="panels">
+    <div class="panel" id="panel-cal">
+      <div class="summary">
+        <h2 style="font-size:1rem;">Active bookings (10)</h2>
+        
+    <p class="note">Rates are estimates. "(sampled)" means it was picked up automatically from a live price
+    quote around the time of the booking, not fetched from Airbnb for the exact reservation. Anything without
+    that tag was entered by hand, usually once confirmed from the agency's payout. Neither is the guaranteed
+    real price. "Discount seen" is what Airbnb was showing guests in that sampled quote (early-bird, special
+    offer, price drop...), an estimate and not the booking's actual breakdown.</p>
+    <table class="list">
+      <thead><tr><th>Check-in</th><th>Last night</th><th>Check-out</th><th>Nights</th><th>Rate/night</th><th>Total</th><th>Discount seen</th><th>ID</th></tr></thead>
+      <tbody><tr><td>2026-09-27</td><td>2026-10-03</td><td>2026-10-04</td><td>7</td><td>—</td><td>—</td><td>—</td><td class='muted'>5ea54184</td></tr><tr><td>2026-10-05</td><td>2026-10-11</td><td>2026-10-12</td><td>7</td><td>—</td><td>—</td><td>—</td><td class='muted'>64584dcb</td></tr><tr><td>2026-10-14</td><td>2026-10-21</td><td>2026-10-22</td><td>8</td><td>€179.00 <span class="muted">(sampled)</span></td><td>€1,432.00 <span class="muted">(sampled)</span></td><td>—</td><td class='muted'>dff09142</td></tr><tr><td>2026-10-22</td><td>2026-10-26</td><td>2026-10-27</td><td>5</td><td>€154.00 <span class="muted">(sampled)</span></td><td>€770.00 <span class="muted">(sampled)</span></td><td>—</td><td class='muted'>a7f3c2d1</td></tr><tr><td>2026-10-27</td><td>2026-11-02</td><td>2026-11-03</td><td>7</td><td>€154.00 <span class="muted">(sampled)</span></td><td>€1,078.00 <span class="muted">(sampled)</span></td><td>—</td><td class='muted'>cb23a931</td></tr><tr><td>2026-11-10</td><td>2026-11-10</td><td>2026-11-11</td><td>1</td><td>€113.90 <span class="muted">(sampled)</span></td><td>€113.90 <span class="muted">(sampled)</span></td><td>—</td><td class='muted'>04f1bd2d</td></tr><tr><td>2026-11-11</td><td>2026-11-15</td><td>2026-11-16</td><td>5</td><td>—</td><td>—</td><td>—</td><td class='muted'>676da61b</td></tr><tr><td>2026-11-25</td><td>2026-11-28</td><td>2026-11-29</td><td>4</td><td>—</td><td>—</td><td>—</td><td class='muted'>f48c6844</td></tr><tr><td>2026-12-01</td><td>2026-12-05</td><td>2026-12-06</td><td>5</td><td>€148.00 <span class="muted">(sampled)</span></td><td>€740.00 <span class="muted">(sampled)</span></td><td>—</td><td class='muted'>8559aefc</td></tr><tr><td>2026-12-30</td><td>2027-01-08</td><td>2027-01-09</td><td>10</td><td>—</td><td>—</td><td>—</td><td class='muted'>63453ece</td></tr></tbody>
+    </table>
+      </div>
+      <div class="months">
+        
+        <div class="month">
+          <h3>September 2026</h3>
+          <table class="calendar">
+            <thead><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr></thead>
+            <tbody><tr><td class="empty"></td><td class="past">1</td><td class="past">2</td><td class="past">3</td><td class="past">4</td><td class="past">5</td><td class="past">6</td></tr><tr><td class="past">7</td><td class="past">8</td><td class="past">9</td><td class="past">10</td><td class="past">11</td><td class="past">12</td><td class="past">13</td></tr><tr><td class="past">14</td><td class="past">15</td><td class="past">16</td><td class="past">17</td><td class="past">18</td><td class="past">19</td><td class="past">20</td></tr><tr><td class="past">21</td><td class="past">22</td><td class="past">23</td><td class="past">24</td><td class="past">25</td><td class="past">26</td><td class="past booked" title="Booking 5ea54184: 2026-09-27 to 2026-10-03 (7 nights)">27</td></tr><tr><td class="past booked" title="Booking 5ea54184: 2026-09-27 to 2026-10-03 (7 nights)">28</td><td class="past booked" title="Booking 5ea54184: 2026-09-27 to 2026-10-03 (7 nights)">29</td><td class="past booked" title="Booking 5ea54184: 2026-09-27 to 2026-10-03 (7 nights)">30</td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="month">
+          <h3>October 2026</h3>
+          <table class="calendar">
+            <thead><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr></thead>
+            <tbody><tr><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="past booked" title="Booking 5ea54184: 2026-09-27 to 2026-10-03 (7 nights)">1</td><td class="past booked" title="Booking 5ea54184: 2026-09-27 to 2026-10-03 (7 nights)">2</td><td class="past booked" title="Booking 5ea54184: 2026-09-27 to 2026-10-03 (7 nights)">3</td><td class="past">4</td></tr><tr><td class="past booked" title="Booking 64584dcb: 2026-10-05 to 2026-10-11 (7 nights)">5</td><td class="past booked" title="Booking 64584dcb: 2026-10-05 to 2026-10-11 (7 nights)">6</td><td class="past booked" title="Booking 64584dcb: 2026-10-05 to 2026-10-11 (7 nights)">7</td><td class="past booked" title="Booking 64584dcb: 2026-10-05 to 2026-10-11 (7 nights)">8</td><td class="past booked" title="Booking 64584dcb: 2026-10-05 to 2026-10-11 (7 nights)">9</td><td class="past booked" title="Booking 64584dcb: 2026-10-05 to 2026-10-11 (7 nights)">10</td><td class="past booked" title="Booking 64584dcb: 2026-10-05 to 2026-10-11 (7 nights)">11</td></tr><tr><td class="past">12</td><td class="past">13</td><td class="past booked" title="Booking dff09142: 2026-10-14 to 2026-10-21 (8 nights)">14</td><td class="past booked" title="Booking dff09142: 2026-10-14 to 2026-10-21 (8 nights)">15</td><td class="past booked" title="Booking dff09142: 2026-10-14 to 2026-10-21 (8 nights)">16</td><td class="past booked" title="Booking dff09142: 2026-10-14 to 2026-10-21 (8 nights)">17</td><td class="past booked" title="Booking dff09142: 2026-10-14 to 2026-10-21 (8 nights)">18</td></tr><tr><td class="past booked" title="Booking dff09142: 2026-10-14 to 2026-10-21 (8 nights)">19</td><td class="past booked" title="Booking dff09142: 2026-10-14 to 2026-10-21 (8 nights)">20</td><td class="past booked" title="Booking dff09142: 2026-10-14 to 2026-10-21 (8 nights)">21</td><td class="past booked" title="Booking a7f3c2d1: 2026-10-22 to 2026-10-26 (5 nights)">22</td><td class="past booked" title="Booking a7f3c2d1: 2026-10-22 to 2026-10-26 (5 nights)">23</td><td class="past booked" title="Booking a7f3c2d1: 2026-10-22 to 2026-10-26 (5 nights)">24</td><td class="past booked" title="Booking a7f3c2d1: 2026-10-22 to 2026-10-26 (5 nights)">25</td></tr><tr><td class="past booked" title="Booking a7f3c2d1: 2026-10-22 to 2026-10-26 (5 nights)">26</td><td class="past booked" title="Booking cb23a931: 2026-10-27 to 2026-11-02 (7 nights)">27</td><td class="past booked" title="Booking cb23a931: 2026-10-27 to 2026-11-02 (7 nights)">28</td><td class="past booked" title="Booking cb23a931: 2026-10-27 to 2026-11-02 (7 nights)">29</td><td class="past booked" title="Booking cb23a931: 2026-10-27 to 2026-11-02 (7 nights)">30</td><td class="past booked" title="Booking cb23a931: 2026-10-27 to 2026-11-02 (7 nights)">31</td><td class="empty"></td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="month">
+          <h3>November 2026</h3>
+          <table class="calendar">
+            <thead><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr></thead>
+            <tbody><tr><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="past booked" title="Booking cb23a931: 2026-10-27 to 2026-11-02 (7 nights)">1</td></tr><tr><td class="past booked" title="Booking cb23a931: 2026-10-27 to 2026-11-02 (7 nights)">2</td><td class="past">3</td><td class="past">4</td><td class="past">5</td><td class="past">6</td><td class="past">7</td><td class="past">8</td></tr><tr><td class="past">9</td><td class="past booked" title="Booking 04f1bd2d: 2026-11-10 to 2026-11-10 (1 nights)">10</td><td class="past booked" title="Booking 676da61b: 2026-11-11 to 2026-11-15 (5 nights)">11</td><td class="past booked" title="Booking 676da61b: 2026-11-11 to 2026-11-15 (5 nights)">12</td><td class="past booked" title="Booking 676da61b: 2026-11-11 to 2026-11-15 (5 nights)">13</td><td class="past booked" title="Booking 676da61b: 2026-11-11 to 2026-11-15 (5 nights)">14</td><td class="past booked" title="Booking 676da61b: 2026-11-11 to 2026-11-15 (5 nights)">15</td></tr><tr><td class="past">16</td><td class="past">17</td><td class="past">18</td><td class="past">19</td><td class="today">20</td><td class="">21</td><td class="">22</td></tr><tr><td class="">23</td><td class="">24</td><td class="booked" title="Booking f48c6844: 2026-11-25 to 2026-11-28 (4 nights)">25</td><td class="booked" title="Booking f48c6844: 2026-11-25 to 2026-11-28 (4 nights)">26</td><td class="booked" title="Booking f48c6844: 2026-11-25 to 2026-11-28 (4 nights)">27</td><td class="booked" title="Booking f48c6844: 2026-11-25 to 2026-11-28 (4 nights)">28</td><td class="">29</td></tr><tr><td class="">30</td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="month">
+          <h3>December 2026</h3>
+          <table class="calendar">
+            <thead><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr></thead>
+            <tbody><tr><td class="empty"></td><td class="booked" title="Booking 8559aefc: 2026-12-01 to 2026-12-05 (5 nights)">1</td><td class="booked" title="Booking 8559aefc: 2026-12-01 to 2026-12-05 (5 nights)">2</td><td class="booked" title="Booking 8559aefc: 2026-12-01 to 2026-12-05 (5 nights)">3</td><td class="booked" title="Booking 8559aefc: 2026-12-01 to 2026-12-05 (5 nights)">4</td><td class="booked" title="Booking 8559aefc: 2026-12-01 to 2026-12-05 (5 nights)">5</td><td class="">6</td></tr><tr><td class="">7</td><td class="">8</td><td class="">9</td><td class="">10</td><td class="">11</td><td class="">12</td><td class="">13</td></tr><tr><td class="">14</td><td class="">15</td><td class="">16</td><td class="">17</td><td class="">18</td><td class="">19</td><td class="">20</td></tr><tr><td class="">21</td><td class="">22</td><td class="">23</td><td class="">24</td><td class="">25</td><td class="">26</td><td class="">27</td></tr><tr><td class="">28</td><td class="">29</td><td class="booked" title="Booking 63453ece: 2026-12-30 to 2027-01-08 (10 nights)">30</td><td class="booked" title="Booking 63453ece: 2026-12-30 to 2027-01-08 (10 nights)">31</td><td class="empty"></td><td class="empty"></td><td class="empty"></td></tr></tbody>
+          </table>
+        </div>
+
+        <div class="month">
+          <h3>January 2027</h3>
+          <table class="calendar">
+            <thead><tr><th>Mon</th><th>Tue</th><th>Wed</th><th>Thu</th><th>Fri</th><th>Sat</th><th>Sun</th></tr></thead>
+            <tbody><tr><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="empty"></td><td class="booked" title="Booking 63453ece: 2026-12-30 to 2027-01-08 (10 nights)">1</td><td class="booked" title="Booking 63453ece: 2026-12-30 to 2027-01-08 (10 nights)">2</td><td class="booked" title="Booking 63453ece: 2026-12-30 to 2027-01-08 (10 nights)">3</td></tr><tr><td class="booked" title="Booking 63453ece: 2026-12-30 to 2027-01-08 (10 nights)">4</td><td class="booked" title="Booking 63453ece: 2026-12-30 to 2027-01-08 (10 nights)">5</td><td class="booked" title="Booking 63453ece: 2026-12-30 to 2027-01-08 (10 nights)">6</td><td class="booked" title="Booking 63453ece: 2026-12-30 to 2027-01-08 (10 nights)">7</td><td class="booked" title="Booking 63453ece: 2026-12-30 to 2027-01-08 (10 nights)">8</td><td class="">9</td><td class="">10</td></tr><tr><td class="">11</td><td class="">12</td><td class="">13</td><td class="">14</td><td class="">15</td><td class="">16</td><td class="">17</td></tr><tr><td class="">18</td><td class="">19</td><td class="">20</td><td class="">21</td><td class="">22</td><td class="">23</td><td class="">24</td></tr><tr><td class="">25</td><td class="">26</td><td class="">27</td><td class="">28</td><td class="">29</td><td class="">30</td><td class="">31</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel" id="panel-log">
+      <h2 style="font-size:1rem;">Activity log</h2>
+      
+    <table class="list">
+      <thead><tr><th>When</th><th>Event</th><th>Details</th><th>Booking</th></tr></thead>
+      <tbody><tr><td class='muted'>2026-11-14 18:01 CET</td><td><span class='badge ev-new'>New booking</span></td><td>Nueva reserva: 2026-12-01 a 2026-12-05 (5 noches, check-out la mañana del 2026-12-06)</td><td class='muted'>8559aefc</td></tr><tr><td class='muted'>2026-11-10 00:37 CET</td><td><span class='badge ev-new'>New booking</span></td><td>Nueva reserva: 2026-11-25 a 2026-11-28 (4 noches, check-out la mañana del 2026-11-29)</td><td class='muted'>f48c6844</td></tr><tr><td class='muted'>2026-11-06 19:34 CET</td><td><span class='badge ev-cancelled'>Cancellation</span></td><td>2026-11-21 a 2026-11-24 (4 noches, check-out la mañana del 2026-11-25) (detectada el 2026-10-13 04:16 CEST)</td><td class='muted'>ec8f5861</td></tr><tr><td class='muted'>2026-11-06 19:34 CET</td><td><span class='badge ev-new'>New booking</span></td><td>Nueva reserva: 2026-11-10 (1 noche)</td><td class='muted'>04f1bd2d</td></tr><tr><td class='muted'>2026-11-04 19:55 CET</td><td><span class='badge ev-new'>New booking</span></td><td>Nueva reserva: 2026-11-11 a 2026-11-15 (5 noches, check-out la mañana del 2026-11-16)</td><td class='muted'>676da61b</td></tr><tr><td class='muted'>2026-10-15 15:44 CEST</td><td><span class='badge ev-new'>New booking</span></td><td>Nueva reserva: 2026-10-22 a 2026-10-26 (5 noches, check-out la mañana del 2026-10-27). Contigua a la reserva dff09142 (hasta 2026-10-21): se registra como reserva nueva, no como ampliacion, por ser lo mas probable.</td><td class='muted'>a7f3c2d1</td></tr><tr><td class='muted'>2026-10-13 04:16 CEST</td><td><span class='badge ev-new'>New booking</span></td><td>Nueva reserva: 2026-11-21 a 2026-11-24 (4 noches, check-out la mañana del 2026-11-25)</td><td class='muted'>ec8f5861</td></tr><tr><td class='muted'>2026-10-08 02:29 CEST</td><td><span class='badge ev-new'>New booking</span></td><td>Nueva reserva: 2026-10-27 a 2026-11-02 (7 noches, check-out la mañana del 2026-11-03)</td><td class='muted'>cb23a931</td></tr><tr><td class='muted'>2026-10-06 13:14 CEST</td><td><span class='badge ev-change'>Correction</span></td><td>Se retira la noche del 2026-10-04 que figuraba como ampliacion (detectada el 2026-10-04 22:31 CEST): era el bloqueo rutinario del dia en curso que hace Airbnb, no una reserva. Vuelve a 2026-09-27 a 2026-10-03 (7 noches, check-out la manana del 2026-10-04).</td><td class='muted'>5ea54184</td></tr><tr><td class='muted'>2026-10-04 22:31 CEST</td><td><span class='badge ev-change'>Booking extended</span></td><td>Ahora 2026-09-27 a 2026-10-04 (8 noches, check-out la mañana del 2026-10-05)</td><td class='muted'>5ea54184</td></tr><tr><td class='muted'>2026-10-02 11:04 CEST</td><td><span class='badge ev-change'>Booking extended</span></td><td>Ahora 2026-10-14 a 2026-10-21 (8 noches, check-out la mañana del 2026-10-22)</td><td class='muted'>dff09142</td></tr><tr><td class='muted'>2026-09-27 16:20 CEST</td><td><span class='badge ev-new'>New booking</span></td><td>Preexistente al empezar a monitorizar: 2026-09-27 a 2026-10-03 (7 noches, check-out la mañana del 2026-10-04)</td><td class='muted'>5ea54184</td></tr><tr><td class='muted'>2026-09-27 16:20 CEST</td><td><span class='badge ev-new'>New booking</span></td><td>Preexistente al empezar a monitorizar: 2026-10-05 a 2026-10-11 (7 noches, check-out la mañana del 2026-10-12)</td><td class='muted'>64584dcb</td></tr><tr><td class='muted'>2026-09-27 16:20 CEST</td><td><span class='badge ev-new'>New booking</span></td><td>Preexistente al empezar a monitorizar: 2026-10-14 a 2026-10-20 (7 noches, check-out la mañana del 2026-10-21)</td><td class='muted'>dff09142</td></tr><tr><td class='muted'>2026-09-27 16:20 CEST</td><td><span class='badge ev-new'>New booking</span></td><td>Preexistente al empezar a monitorizar: 2026-12-30 a 2027-01-08 (10 noches, check-out la mañana del 2027-01-09)</td><td class='muted'>63453ece</td></tr></tbody>
+    </table>
+    </div>
+
+    <div class="panel" id="panel-prices">
+      <h2 style="font-size:1rem;">Sampled prices</h2>
+      
+    <p class="note">Live price quoted by Airbnb today for a sample window in each month (and each special period),
+    not what any specific guest paid. Sampled once a day; the arrow compares today's sample to the previous one
+    for the same window.</p>
+    <table class="list">
+      <thead><tr><th>Period</th><th>Sample window</th><th>Latest rate/night</th><th>Change</th><th>Last sampled</th></tr></thead>
+      <tbody><tr><td>October 2026</td><td class='muted'>2026-10-22 → 2026-10-27</td><td>€154.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-10-14 14:28 CEST</td></tr><tr><td>November 2026</td><td class='muted'>2026-11-18 → 2026-11-23</td><td>€112.54</td><td><span class="price-trend down">&#9660; -€1.36</span></td><td class='muted'>2026-11-18 17:00 CET</td></tr><tr><td>December 2026</td><td class='muted'>2026-12-06 → 2026-12-11</td><td>€148.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-19 17:06 CET</td></tr><tr><td>Navidad y Fin de Año</td><td class='muted'>2026-12-20 → 2026-12-25</td><td>€163.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-19 17:06 CET</td></tr><tr><td>January 2027</td><td class='muted'>2027-01-09 → 2027-01-14</td><td>€150.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-19 17:06 CET</td></tr><tr><td>February 2027</td><td class='muted'>2027-02-01 → 2027-02-06</td><td>€150.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-19 17:06 CET</td></tr><tr><td>March 2027</td><td class='muted'>2027-03-01 → 2027-03-06</td><td>€165.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-19 17:06 CET</td></tr><tr><td>April 2027</td><td class='muted'>2027-04-01 → 2027-04-06</td><td>€182.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-18 17:00 CET</td></tr><tr><td>Semana Santa Ortodoxa 2027</td><td class='muted'>2027-04-28 → 2027-05-03</td><td>€185.20</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-19 17:06 CET</td></tr><tr><td>May 2027</td><td class='muted'>2027-05-01 → 2027-05-06</td><td>€190.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-19 17:06 CET</td></tr><tr><td>June 2027</td><td class='muted'>2027-06-01 → 2027-06-06</td><td>€210.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-19 17:06 CET</td></tr><tr><td>Kataklysmos (Fiesta del Diluvio, Larnaca)</td><td class='muted'>2027-06-17 → 2027-06-22</td><td>€210.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-19 17:06 CET</td></tr><tr><td>July 2027</td><td class='muted'>2027-07-01 → 2027-07-06</td><td>€232.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-19 17:06 CET</td></tr><tr><td>August 2027</td><td class='muted'>2027-08-01 → 2027-08-06</td><td>€256.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-19 17:06 CET</td></tr><tr><td>September 2027</td><td class='muted'>2027-09-01 → 2027-09-06</td><td>€232.00</td><td><span class="price-trend flat">&#8212; no change</span></td><td class='muted'>2026-11-18 17:00 CET</td></tr></tbody>
+    </table>
+    </div>
+  </div>
+
+  <footer>Generated by the Finikoudes calendar monitor. Status inferred from the listing's public availability — see the repository README for the safeguards applied.</footer>
+</div>
+<script>
+  // Se calcula en el propio navegador, cada vez que se abre la pagina --
+  // no en el servidor -- para que la antiguedad se compare siempre
+  // contra la hora real de quien la esta mirando, no contra la hora en
+  // que se genero el HTML. Si el workflow deja de correr (falla, o
+  // GitHub Actions tiene un problema), esta pagina estatica se queda
+  // congelada en su ultimo "Automatically updated on..." -- este aviso
+  // es la unica forma de notarlo con solo mirar la pagina.
+  (function () {
+    var OUTDATED_AFTER_MS = 6 * 60 * 60 * 1000; // 6 horas
+    var el = document.getElementById('updated-at');
+    var badge = document.getElementById('outdated-badge');
+    if (!el || !badge) return;
+    var generatedAt = new Date(el.getAttribute('data-generated-at'));
+    if (isNaN(generatedAt.getTime())) return;
+    var ageMs = Date.now() - generatedAt.getTime();
+    if (ageMs > OUTDATED_AFTER_MS) {
+      badge.style.display = 'inline';
+    }
+  })();
+</script>
+</body>
+</html>
